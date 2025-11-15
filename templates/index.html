@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Face Login Election System</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #000428, #004e92);
+      background-size: 200% 200%;
+      animation: moveGradient 15s ease infinite;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    @keyframes moveGradient {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    .glow-button {
+      position: relative;
+      overflow: hidden;
+      color: white;
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+
+    .glow-button::before {
+      content: "";
+      position: absolute;
+      top: -50%;
+      left: -50%;
+      width: 200%;
+      height: 200%;
+      background: radial-gradient(circle, #00ffe0, #0066ff);
+      animation: rotateGlow 3s linear infinite;
+      opacity: 0.2;
+    }
+
+    @keyframes rotateGlow {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .glow-button:hover {
+      background-color: #00ffe0 !important;
+      color: #000 !important;
+      transform: scale(1.05);
+    }
+
+    h1 span {
+      background: linear-gradient(to right, #00c6ff, #0072ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .admin-modal {
+      background: rgba(255, 255, 255, 0.9);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      animation: fadeIn 0.3s ease-in-out;
+    }
+    .admin-modal h2 {
+      font-size: 1.75rem;
+      font-weight: bold;
+      color: #333;
+    }
+    .admin-modal input {
+      border: 1px solid #ccc;
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      width: 100%;
+      margin-bottom: 1rem;
+      font-size: 1rem;
+    }
+    .admin-modal button {
+      background: linear-gradient(to right, #4caf50, #81c784);
+      color: white;
+      font-weight: bold;
+      padding: 0.75rem 1.5rem;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: transform 0.2s ease, background-color 0.3s ease;
+    }
+    .admin-modal button:hover {
+      transform: scale(1.05);
+      background: linear-gradient(to right, #388e3c, #66bb6a);
+    }
+    .admin-modal .error-message {
+      color: red;
+      font-size: 0.875rem;
+      margin-top: -0.5rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+
+<body class="flex items-center justify-center min-h-screen px-4">
+  <div class="glass p-10 max-w-3xl w-full text-center">
+    <h1 class="text-5xl font-extrabold mb-6 drop-shadow-lg">
+      <span>Face Login Election System</span>
+    </h1>
+
+    <img
+    src="{{ url_for('static', filename='images/election.png') }}"
+    alt="Election"
+    class="mx-auto w-full max-h-96 object-cover rounded-xl mb-8 shadow-xl border border-gray-200"
+  />
+  
+
+    <div class="flex justify-center gap-8 mt-4">
+      <button onclick="openAdminLoginModal()" class="glow-button bg-blue-800 px-6 py-3 rounded-lg shadow-xl">Admin Login</button>
+      <a href="/student-login">
+        <button class="glow-button bg-green-700 px-6 py-3 rounded-lg shadow-xl">Student Login</button>
+      </a>
+    </div>
+  </div>
+
+  <!-- Admin Login Modal -->
+  <div id="adminLoginModal" class="fixed inset-0 hidden bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="admin-modal p-8 text-center shadow-xl w-full max-w-md relative">
+      <button onclick="closeAdminLoginModal()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800">&times;</button>
+      <h2 class="mb-4">Admin Login</h2>
+      <form id="adminLoginForm" class="space-y-4">
+        <input type="text" id="adminUsername" placeholder="Admin Username" required />
+        <input type="password" id="adminPassword" placeholder="Admin Password" required />
+        <p id="adminErrorMessage" class="error-message"></p>
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Open Admin Login Modal
+    function openAdminLoginModal() {
+      document.getElementById('adminLoginModal').classList.remove('hidden');
+    }
+
+    // Close Admin Login Modal
+    function closeAdminLoginModal() {
+      document.getElementById('adminLoginModal').classList.add('hidden');
+    }
+
+    // Handle Admin Login
+    document.getElementById('adminLoginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const username = document.getElementById('adminUsername').value.trim();
+      const password = document.getElementById('adminPassword').value.trim();
+
+      const response = await fetch('/admin-login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        window.location.href = '/admin';
+      } else {
+        document.getElementById('adminErrorMessage').innerText = result.message || 'Invalid credentials.';
+      }
+    });
+  </script>
+</body>
+</html>

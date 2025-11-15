@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vote for Your Candidate</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #ff9a9e, #fad0c4, #fbc2eb);
+      background-size: 200% 200%;
+      animation: gradientBG 15s ease infinite;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .card {
+      background: rgba(255, 255, 255, 0.8);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      backdrop-filter: blur(10px);
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      transform: scale(1.05);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .radio-button {
+      accent-color: #4caf50;
+      transform: scale(1.5);
+    }
+
+    .profile-photo {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 4px solid #4caf50;
+      cursor: pointer;
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .profile-photo:hover {
+      transform: scale(1.1);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .profile-modal {
+      background: linear-gradient(135deg, #ff9a9e, #fad0c4, #fbc2eb);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+      animation: flyIn 0.5s ease-in-out;
+    }
+
+    @keyframes flyIn {
+      from {
+        opacity: 0;
+        transform: translateY(-50px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-6">
+  <!-- Logout Button -->
+  <div class="w-full flex justify-end mb-6">
+    <button onclick="logout()" class="px-6 py-2 bg-red-500 text-white font-bold rounded-lg hover:bg-red-600 transition">
+      Logout
+    </button>
+  </div>
+
+  <!-- User Profile Section -->
+  <div class="flex items-center justify-center mb-6">
+    <img src="{{ user['photo'] }}" alt="User Photo" class="profile-photo" onclick="openProfileModal()" />
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profileModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="profile-modal p-8 text-center shadow-xl w-full max-w-md relative">
+      <button onclick="closeProfileModal()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800">&times;</button>
+      <h2 class="text-2xl font-bold mb-4">Your Profile</h2>
+      <img src="{{ user['photo'] }}" alt="User Photo" class="w-32 h-32 rounded-full mx-auto mb-4" />
+      <p><strong>Name:</strong> {{ user['name'] }}</p>
+      <p><strong>Username:</strong> {{ user['username'] }}</p>
+      <p><strong>Email:</strong> {{ user['email'] }}</p>
+      <p><strong>Roll Number:</strong> {{ user['roll_number'] }}</p>
+      <p><strong>Class:</strong> {{ user['class'] }}</p>
+    </div>
+  </div>
+
+  <h1 class="text-4xl font-extrabold text-center mb-10 text-white">Vote for Each Role</h1>
+  <form id="voteForm" class="w-full max-w-6xl space-y-10">
+    {% for role, candidates in candidates_by_role.items() %}
+      <fieldset class="border border-white/40 rounded-xl p-4">
+        <legend class="px-3 py-1 bg-white/20 rounded text-white font-bold text-xl">{{ role }}</legend>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+          {% for c in candidates %}
+          <label class="card flex items-center p-6 cursor-pointer">
+            <img src="{{ c.photo }}" alt="Candidate Photo" class="w-20 h-20 rounded-full border-4 border-blue-400 shadow-lg mr-4" />
+            <div class="flex-1">
+              <h2 class="text-lg font-bold text-gray-800">{{ c.name }}</h2>
+              <p class="text-gray-600"><strong>Class:</strong> {{ c.class }}</p>
+              <p class="text-gray-600 text-sm"><strong>Description:</strong> {{ c.description }}</p>
+            </div>
+            <input type="radio" name="role_{{ role }}" value="{{ c.name }}" class="radio-button ml-4" required />
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+    {% endfor %}
+
+    <button type="submit" class="mt-6 px-6 py-3 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition">Submit All Votes</button>
+  </form>
+
+  <!-- Success Modal -->
+  <div id="successModal" class="hidden fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-8 text-center shadow-xl w-full max-w-md relative">
+      <h2 class="text-2xl font-bold mb-4 text-green-600">✅ Vote Submitted Successfully!</h2>
+      <button onclick="logout()" class="mt-4 px-6 py-2 bg-blue-500 text-white rounded hover:bg-blue-700">Okay</button>
+    </div>
+  </div>
+
+  <script>
+    // Logout function
+    async function logout() {
+      const response = await fetch('/logout', { method: 'POST' });
+      if (response.ok) {
+        window.location.href = '/';
+      } else {
+        alert('Failed to logout. Please try again.');
+      }
+    }
+
+    function openProfileModal() {
+      document.getElementById('profileModal').classList.remove('hidden');
+    }
+
+    function closeProfileModal() {
+      document.getElementById('profileModal').classList.add('hidden');
+    }
+
+    document.getElementById('voteForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      // Build selections per role
+      const selections = {};
+      const roleFieldsets = document.querySelectorAll('fieldset');
+      for (const fs of roleFieldsets) {
+        const legend = fs.querySelector('legend');
+        const role = legend ? legend.textContent.trim() : null;
+        if (!role) continue;
+        const selected = fs.querySelector('input[type="radio"]:checked');
+        if (!selected) {
+          alert(`Please select a candidate for role: ${role}`);
+          return;
+        }
+        selections[role] = selected.value;
+      }
+
+      const response = await fetch('/submit-vote', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ selections }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        document.getElementById('successModal').classList.remove('hidden');
+      } else {
+        alert(result.message || 'Failed to submit vote.');
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Student Login</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      background-size: 600% 600%;
+      animation: rainbow 15s ease infinite;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    @keyframes rainbow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    .glass {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 1rem;
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    h2 span {
+      background: linear-gradient(to right, #ff6a00, #ee0979);
+      background-clip: text;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .modal-bg {
+      background-color: rgba(0, 0, 0, 0.7);
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen px-6 relative">
+
+  <!-- Main Glass Card -->
+  <div class="glass w-full max-w-6xl p-10 shadow-xl">
+    <h2 class="text-4xl font-extrabold text-center mb-10">
+      <span>Student Login</span>
+    </h2>
+    
+    <div class="flex flex-col lg:flex-row gap-12">
+      <!-- Webcam + Face Login -->
+      <div class="flex-1 flex flex-col items-center justify-center">
+        <video id="video" autoplay class="rounded-xl shadow-xl border border-white w-full max-w-md mb-6 h-64 object-cover"></video>
+        <button id="faceLoginBtn" class="px-6 py-3 rounded-lg font-bold bg-gradient-to-r from-cyan-400 to-blue-500 text-black hover:from-green-400 hover:to-teal-400 transition-transform hover:scale-105">Face Login</button>
+      </div>
+
+      <!-- Traditional Login -->
+      <div class="flex-1 flex flex-col justify-center">
+        <form id="loginForm" class="space-y-6">
+          <input id="username" type="text" placeholder="Username" class="w-full px-4 py-3 rounded-md bg-white bg-opacity-20 text-white placeholder-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          <input id="password" type="password" placeholder="Password" class="w-full px-4 py-3 rounded-md bg-white bg-opacity-20 text-white placeholder-white border border-white border-opacity-30 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          <button type="submit" class="w-full px-6 py-3 rounded-lg font-bold bg-gradient-to-r from-pink-400 to-red-500 text-white hover:from-yellow-400 hover:to-orange-500 transition-transform hover:scale-105">Login</button>
+        </form>
+
+        <div class="text-white mt-4 text-center">
+          New User? 
+          <a href="/student-registration" class="underline text-blue-300 hover:text-blue-500 font-semibold">Create Profile</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success/Error Modal -->
+  <div id="modal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-bg">
+    <div class="bg-white max-w-2xl w-full rounded-lg p-8 shadow-lg relative text-gray-800">
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <!-- Loading Spinner Modal -->
+  <div id="loadingModal" class="hidden fixed inset-0 z-40 flex items-center justify-center modal-bg">
+    <div class="flex flex-col items-center gap-4">
+      <div class="w-16 h-16 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-white font-semibold text-lg">Processing...</p>
+    </div>
+  </div>
+
+  <!-- Profile Modal -->
+  <div id="profileModal" class="fixed inset-0 hidden bg-black bg-opacity-60 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-8 text-center shadow-xl">
+      <h2 class="text-2xl font-bold mb-4">Profile Details</h2>
+      <img id="profilePhoto" class="w-32 h-32 rounded-full mx-auto mb-4" alt="Profile Photo" />
+      <p><strong>Name:</strong> <span id="profileName"></span></p>
+      <p><strong>Email:</strong> <span id="profileEmail"></span></p>
+      <p><strong>Roll Number:</strong> <span id="profileRollNumber"></span></p>
+      <p><strong>Class:</strong> <span id="profileClass"></span></p>
+      <button onclick="closeModal()" class="mt-4 px-6 py-2 bg-purple-500 text-white rounded hover:bg-purple-700">Close</button>
+    </div>
+  </div>
+
+  <!-- JS Section -->
+  <script>
+    const video = document.getElementById('video');
+    const faceLoginBtn = document.getElementById('faceLoginBtn');
+  const modal = document.getElementById('modal');
+    const modalContent = document.getElementById('modalContent');
+    const loadingModal = document.getElementById('loadingModal');
+
+    // Start webcam
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => console.error("Webcam access denied: ", err));
+
+    // Show/Hide Loading Spinner
+    function toggleLoading(show = true) {
+      if (show) {
+        loadingModal.classList.remove('hidden');
+      } else {
+        loadingModal.classList.add('hidden');
+      }
+    }
+
+    // Capture Webcam Image
+    function captureImage() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    }
+
+    // Face Login Handler
+    faceLoginBtn.addEventListener('click', async () => {
+      faceLoginBtn.disabled = true;
+      faceLoginBtn.innerText = "Processing...";
+      toggleLoading(true);
+
+      const imageBlob = await captureImage();
+  const formData = new FormData();
+  formData.append('photo', imageBlob, 'face.png');
+
+      try {
+        const response = await fetch('/face-login', {
+          method: 'POST',
+          body: formData
+        });
+
+        const result = await response.json();
+        toggleLoading(false);
+        faceLoginBtn.disabled = false;
+        faceLoginBtn.innerText = "Face Login";
+
+        if (result.status === 'error') {
+          showModal(`<h2 class="text-2xl font-bold mb-4 text-red-600">Oops!</h2><p>${result.message}</p>`);
+        } else {
+          const data = result.data;
+          showModal(`
+            <h2 class="text-2xl font-bold mb-6 text-green-600 text-center">🎉 Congratulations! Profile Found</h2>
+            <div class="flex flex-col md:flex-row gap-6 items-center">
+              <img src="${data.photo}" alt="User Photo" class="w-40 h-40 rounded-full border-4 border-green-400 shadow-lg" />
+              <div class="text-left space-y-2">
+                <p><strong>Name:</strong> ${data.name}</p>
+                <p><strong>Email:</strong> ${data.email}</p>
+                <p><strong>Roll Number:</strong> ${data.roll_number}</p>
+                <p><strong>Class:</strong> ${data.class}</p>
+                <p><strong>Username:</strong> ${data.username}</p>
+                <button onclick="checkResultOrVote()" class="mt-4 px-5 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition">Let's Vote</button>
+              </div>
+            </div>
+          `);
+        }
+      } catch (err) {
+        toggleLoading(false);
+        faceLoginBtn.disabled = false;
+        faceLoginBtn.innerText = "Face Login";
+        showModal(`<h2 class="text-2xl font-bold mb-4 text-red-600">Oops!</h2><p>Something went wrong. Please try again.</p>`);
+        console.error(err);
+      }
+    });
+
+    // Show Modal Content
+    function showModal(content) {
+      modalContent.innerHTML = content;
+      modal.classList.remove('hidden');
+    }
+
+    // Close Modal on Background Click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.add('hidden');
+    });
+
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      try {
+        const response = await fetch('/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ username, password }),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          const data = result.data;
+          showModal(`
+            <h2 class="text-2xl font-bold mb-6 text-green-600 text-center">🎉 Login Successful</h2>
+            <div class="flex flex-col md:flex-row gap-6 items-center">
+              <img src="${data.photo}" alt="User Photo" class="w-40 h-40 rounded-full border-4 border-green-400 shadow-lg" />
+              <div class="text-left space-y-2">
+                <p><strong>Name:</strong> ${data.name}</p>
+                <p><strong>Email:</strong> ${data.email}</p>
+                <p><strong>Roll Number:</strong> ${data.roll_number}</p>
+                <p><strong>Class:</strong> ${data.class}</p>
+                <p><strong>Username:</strong> ${data.username}</p>
+                <button onclick="checkResultOrVote()" class="mt-4 px-5 py-2 bg-green-500 text-white rounded hover:bg-green-600 transition">Let's Vote</button>
+              </div>
+            </div>
+            
+            `);
+        } else {
+          showModal(`<h2 class="text-2xl font-bold mb-4 text-red-600">Oops!</h2><p>${result.message || 'Profile not found.'}</p>`);
+        }
+      } catch (err) {
+        showModal(`<h2 class="text-2xl font-bold mb-4 text-red-600">Oops!</h2><p>Something went wrong. Please try again.</p>`);
+        console.error(err);
+      }
+    });
+
+    
+
+    async function checkResultOrVote() {
+      try {
+        const response = await fetch('/check-result-or-vote', { method: 'POST' });
+        const result = await response.json();
+
+        if (result.redirectTo === 'result') {
+          window.location.href = '/result';
+        } else if (result.message) {
+          showModal(result.message);
+        } else {
+          window.location.href = '/candidates';
+        }
+      } catch (err) {
+        console.error(err);
+        showModal('An error occurred. Please try again.');
+      }
+    }
+
+    function redirectToCandidates() {
+      window.location.href = '/candidates';
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('infoModal');
+      if (modal) modal.remove();
+    }
+  </script>
+</body>
+</html>

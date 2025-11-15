@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+*.egg
+.Python
+env/
+venv/
+ENV/
+.env
+# Byte-compiled / optimized / DLL files
+*.pyc
+
+# Distribution / packaging
+build/
+dist/
+.eggs/
+*.egg-info/
+
+# VSCode and IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database and uploads
+Election.db
+flask_session/
+static/uploads/
+static/uploads/descriptors/
+
+# Logs
+*.log
+
+# Secrets
+secrets.json
+
+# Docker
+docker-compose.override.yml
+
+# PyTest cache
+.pytest_cache/
