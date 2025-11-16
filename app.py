@@ -684,6 +684,60 @@ def init_audit_log_table():
     conn.commit()
     conn.close()
 
+def init_election_config_table():
+    """Create table to store election config persistently"""
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Election_config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def load_election_config():
+    """Load election config from database"""
+    global ELECTION_CONFIG
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM Election_config")
+        rows = cursor.fetchall()
+        conn.close()
+        
+        for key, value in rows:
+            # Convert string value back to appropriate type
+            if value.lower() == 'true':
+                ELECTION_CONFIG[key] = True
+            elif value.lower() == 'false':
+                ELECTION_CONFIG[key] = False
+            else:
+                ELECTION_CONFIG[key] = value
+        print(f"Loaded election config from database: {ELECTION_CONFIG}")
+    except Exception as e:
+        print(f"Error loading election config: {e}")
+
+def save_election_config():
+    """Save election config to database for persistence"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        # Clear existing config
+        cursor.execute("DELETE FROM Election_config")
+        # Save current config
+        for key, value in ELECTION_CONFIG.items():
+            cursor.execute(
+                "INSERT INTO Election_config (key, value) VALUES (?, ?)",
+                (key, str(value))
+            )
+        conn.commit()
+        conn.close()
+        print(f"Saved election config to database")
+    except Exception as e:
+        print(f"Error saving election config: {e}")
+
 def log_audit_action(action, username='', email='', details=''):
     """Log an action to the audit log"""
     if not ELECTION_CONFIG['enable_audit_logging']:
@@ -1572,8 +1626,8 @@ def delete_election():
         conn = sqlite3.connect(DATABASE)
         cursor = conn.cursor()
 
-        # Drop all tables
-        tables = ['Student_details', 'Candidate', 'Result', 'Vote']
+        # Drop all tables including audit logs
+        tables = ['Student_details', 'Candidate', 'Result', 'Vote', 'Audit_log']
         for table in tables:
             cursor.execute(f"DROP TABLE IF EXISTS {table}")
 
@@ -1717,6 +1771,8 @@ def get_audit_log():
 def admin_election_config():
     """Get or update election configuration"""
     if request.method == 'GET':
+        # Load latest config from database
+        load_election_config()
         # Return current election config
         return jsonify({
             'success': True,
@@ -1731,6 +1787,8 @@ def admin_election_config():
                 if key in data:
                     ELECTION_CONFIG[key] = data[key]
             
+            # Save to database for persistence
+            save_election_config()
             log_audit_action('CONFIG_UPDATE', details=f'Election config updated: {data}')
             
             return jsonify({'success': True, 'config': ELECTION_CONFIG})
@@ -1745,6 +1803,9 @@ if __name__ == '__main__':
         init_vote_table()
         init_result()
         init_audit_log_table()
+        init_election_config_table()
+        # Load saved config from database
+        load_election_config()
     except Exception as e:
         print(f"Database initialization failed: {e}")
 
