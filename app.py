@@ -61,6 +61,12 @@ SMTP_CONFIG = {
 def send_email(recipient, subject, body, is_html=False):
     """Send email notification"""
     if not ELECTION_CONFIG['enable_email_notifications']:
+        print(f"Email notifications disabled, skipping email to {recipient}")
+        return False
+    
+    # Check if SMTP config is properly set
+    if not SMTP_CONFIG['sender_email'] or not SMTP_CONFIG['sender_password']:
+        print(f"SMTP credentials not configured (EMAIL_USER/EMAIL_PASSWORD env vars), skipping email to {recipient}")
         return False
     
     try:
@@ -77,10 +83,12 @@ def send_email(recipient, subject, body, is_html=False):
         server.send_message(msg)
         server.quit()
         
+        print(f"Email sent successfully to {recipient}")
         return True
     except Exception as e:
-        print(f"Email error: {e}")
-        return False
+        print(f"Email error for {recipient}: {e}")
+        # Return True anyway to not fail registration/voting if email fails
+        return True
 
 # ============= TUNABLE MATCHING THRESHOLDS =============
 # These can be adjusted to improve accuracy. Lower thresholds = more matches (but more false positives).
@@ -1350,14 +1358,16 @@ def get_voters():
 
         # Total roles
         cursor.execute("SELECT COUNT(DISTINCT COALESCE(Role, 'General')) FROM Candidate")
-        total_roles = cursor.fetchone()[0]
+        total_roles_result = cursor.fetchone()
+        total_roles = total_roles_result[0] if total_roles_result else 0
 
         # Check voting status for each user (voted all roles?)
         voters = []
         for student in students:
             name, username, email = student
             cursor.execute("SELECT COUNT(DISTINCT COALESCE(Role, 'General')) FROM Vote WHERE Username = ? AND Email = ?", (username, email))
-            voted_roles = cursor.fetchone()[0]
+            voted_result = cursor.fetchone()
+            voted_roles = voted_result[0] if voted_result else 0
             voted = (voted_roles >= total_roles and total_roles > 0)
             voters.append({
                 'name': name,
@@ -1369,6 +1379,7 @@ def get_voters():
         conn.close()
         return jsonify(voters)
     except Exception as e:
+        print(f"get_voters error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/get-stats', methods=['GET'])
