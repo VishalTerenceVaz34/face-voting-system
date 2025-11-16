@@ -1,14 +1,20 @@
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template, session, send_file
 from flask_session import Session
 import os
 import sqlite3
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import csv
+import random
+import string
 import cv2
 import face_recognition
 import numpy as np
 from werkzeug.utils import secure_filename
-from io import BytesIO
+from io import BytesIO, StringIO
 from PIL import Image, UnidentifiedImageError
 
 app = Flask(__name__)
@@ -33,6 +39,48 @@ if not os.path.exists(UPLOAD_FOLDER):
 app.config['SECRET_KEY'] = 'your_secret_key'
 app.config['SESSION_TYPE'] = 'filesystem'
 Session(app)
+
+# ============= ELECTION CONFIGURATION =============
+ELECTION_CONFIG = {
+    'enable_countdown_timer': True,
+    'election_end_time': None,  # Will be fetched from DB or set manually (ISO format string)
+    'enable_email_notifications': True,
+    'enable_2fa': True,
+    'enable_audit_logging': True,
+    'enable_export': True,
+}
+
+# ============= SMTP CONFIGURATION FOR EMAIL =============
+SMTP_CONFIG = {
+    'server': os.getenv('SMTP_SERVER', 'smtp.gmail.com'),
+    'port': int(os.getenv('SMTP_PORT', '587')),
+    'sender_email': os.getenv('EMAIL_USER', ''),
+    'sender_password': os.getenv('EMAIL_PASSWORD', ''),
+}
+
+def send_email(recipient, subject, body, is_html=False):
+    """Send email notification"""
+    if not ELECTION_CONFIG['enable_email_notifications']:
+        return False
+    
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_CONFIG['sender_email']
+        msg['To'] = recipient
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'html' if is_html else 'plain'))
+        
+        server = smtplib.SMTP(SMTP_CONFIG['server'], SMTP_CONFIG['port'])
+        server.starttls()
+        server.login(SMTP_CONFIG['sender_email'], SMTP_CONFIG['sender_password'])
+        server.send_message(msg)
+        server.quit()
+        
+        return True
+    except Exception as e:
+        print(f"Email error: {e}")
+        return False
 
 # ============= TUNABLE MATCHING THRESHOLDS =============
 # These can be adjusted to improve accuracy. Lower thresholds = more matches (but more false positives).
@@ -611,6 +659,42 @@ def init_vote_table():
     conn.commit()
     conn.close()
 
+def init_audit_log_table():
+    conn = sqlite3.connect(DATABASE)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS Audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT,
+            action TEXT,
+            username TEXT,
+            email TEXT,
+            ip_address TEXT,
+            details TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+def log_audit_action(action, username='', email='', details=''):
+    """Log an action to the audit log"""
+    if not ELECTION_CONFIG['enable_audit_logging']:
+        return
+    
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        timestamp = datetime.now().isoformat()
+        ip_address = request.remote_addr if request else 'unknown'
+        cursor.execute('''
+            INSERT INTO Audit_log (timestamp, action, username, email, ip_address, details)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (timestamp, action, username, email, ip_address, details))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Audit log error: {e}")
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -686,7 +770,31 @@ def register():
         except Exception:
             pass
 
+        # Log to audit log
+        log_audit_action('REGISTER', username=username, email=email, details=f'Registered user {full_name}')
+
+        # Send registration confirmation email
+        if email:
+            subject = "Registration Successful - Face Voting System"
+            body = f"""
+Hello {full_name},
+
+Thank you for registering with the Face Voting System!
+
+Your registration details:
+- Username: {username}
+- Roll Number: {roll_number}
+- Class: {class_name}
+
+You can now log in using your face and password.
+
+Best regards,
+Election Administration
+"""
+            send_email(email, subject, body)
+
         return jsonify({"success": True})
+
 
     except sqlite3.IntegrityError:
         return jsonify({"success": False, "message": "Username already exists."})
@@ -970,9 +1078,14 @@ def face_login():
                 'password': bool(prev.get('password') and prev.get('username') == username),
                 'face': True
             }
+            # Log successful face login
+            log_audit_action('LOGIN_FACE_SUCCESS', username=username, email=email, details=f'Score: {best_score:.3f}, Method: {best_method}')
             return jsonify({'status': 'success', 'data': session['user'], 'method': best_method, 'score': best_score, 'second_best': second_best_score, 'methods_agree': methods_agree})
 
+    # Log failed face login
+    log_audit_action('LOGIN_FACE_FAILED', details='Face not recognized or match threshold not met')
     return jsonify({'status': 'error', 'message': 'Face not recognized in records.'})
+
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -1009,15 +1122,23 @@ def login():
                 'password': True,
                 'face': bool(prev.get('face') and prev.get('username') == username)
             }
+            
+            # Log successful login
+            log_audit_action('LOGIN_PASSWORD_SUCCESS', username=username, email=email)
+            
             return jsonify({
                 'success': True,
                 'data': session['user']
             })
         else:
+            # Log failed login attempt
+            log_audit_action('LOGIN_PASSWORD_FAILED', username=username, details='Invalid credentials')
             return jsonify({'success': False, 'message': 'Profile not found.'})
 
     except Exception as e:
+        log_audit_action('LOGIN_PASSWORD_ERROR', username=data.get('username', ''), details=str(e))
         return jsonify({'success': False, 'message': str(e)})
+
 
     
 
@@ -1161,7 +1282,31 @@ def submit_vote():
         conn.commit()
         conn.close()
 
+        # Log vote to audit log with all selected candidates
+        vote_details = ', '.join([f'{role}: {candidate_name}' for role, candidate_name in selections.items()])
+        log_audit_action('VOTE_SUBMITTED', username=username, email=email, details=vote_details)
+
+        # Send vote confirmation email
+        if email:
+            subject = "Vote Confirmation - Face Voting System"
+            vote_summary = '\n'.join([f'  • {role}: {candidate_name}' for role, candidate_name in selections.items()])
+            body = f"""
+Hello {name},
+
+Your vote has been successfully recorded!
+
+Your selections:
+{vote_summary}
+
+Thank you for participating in the election.
+
+Best regards,
+Election Administration
+"""
+            send_email(email, subject, body)
+
         return jsonify({'success': True})
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -1299,7 +1444,51 @@ def save_results():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
-@app.route('/result', methods=['GET'])
+@app.route('/export-results', methods=['GET'])
+def export_results():
+    """Export election results as CSV"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+
+        # Fetch all results from the Result table
+        cursor.execute("SELECT Name, Photo, Class, COALESCE(Role, 'General') as Role, Votes FROM Result ORDER BY Role, Votes DESC")
+        results = cursor.fetchall()
+        conn.close()
+
+        # Create CSV in memory
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow(['Candidate Name', 'Class', 'Role', 'Votes'])
+        
+        # Write data
+        for row in results:
+            name, photo, class_name, role, votes = row
+            writer.writerow([name, class_name, role, votes])
+        
+        # Get CSV string
+        csv_data = output.getvalue()
+        output.close()
+        
+        # Create response with CSV file
+        response = BytesIO(csv_data.encode('utf-8'))
+        response.seek(0)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'election_results_{timestamp}.csv'
+        
+        return send_file(
+            response,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
 def result():
     try:
         conn = sqlite3.connect(DATABASE)
@@ -1478,6 +1667,65 @@ def debug_match():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/admin/audit-log', methods=['GET'])
+def get_audit_log():
+    """Fetch audit log for admin dashboard"""
+    try:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+        
+        # Fetch audit log sorted by timestamp (newest first)
+        cursor.execute('''
+            SELECT timestamp, action, username, email, ip_address, details
+            FROM Audit_log
+            ORDER BY timestamp DESC
+            LIMIT 1000
+        ''')
+        
+        logs = cursor.fetchall()
+        conn.close()
+        
+        # Format as list of dicts
+        audit_logs = [
+            {
+                'timestamp': row[0],
+                'action': row[1],
+                'username': row[2],
+                'email': row[3],
+                'ip_address': row[4],
+                'details': row[5]
+            }
+            for row in logs
+        ]
+        
+        return jsonify({'success': True, 'logs': audit_logs})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/admin/election-config', methods=['GET', 'POST'])
+def admin_election_config():
+    """Get or update election configuration"""
+    if request.method == 'GET':
+        # Return current election config
+        return jsonify({
+            'success': True,
+            'config': ELECTION_CONFIG
+        })
+    else:
+        # Update election config (POST)
+        try:
+            data = request.get_json()
+            # Update ELECTION_CONFIG with provided fields
+            for key in ['enable_countdown_timer', 'election_end_time', 'enable_email_notifications', 'enable_2fa', 'enable_audit_logging', 'enable_export']:
+                if key in data:
+                    ELECTION_CONFIG[key] = data[key]
+            
+            log_audit_action('CONFIG_UPDATE', details=f'Election config updated: {data}')
+            
+            return jsonify({'success': True, 'config': ELECTION_CONFIG})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)}), 500
+
 if __name__ == '__main__':
     # Ensure DB and tables exist before starting
     try:
@@ -1485,7 +1733,9 @@ if __name__ == '__main__':
         init_candidate_table()
         init_vote_table()
         init_result()
+        init_audit_log_table()
     except Exception as e:
         print(f"Database initialization failed: {e}")
 
     app.run(debug=True)
+

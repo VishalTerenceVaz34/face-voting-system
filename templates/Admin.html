@@ -263,7 +263,9 @@
           <div class="tab active" onclick="changeTab(this, 'dashboard')">📊 Dashboard</div>
           <div class="tab" onclick="changeTab(this, 'voters')">🧑‍🤝‍🧑 Voters</div>
           <div class="tab" onclick="changeTab(this, 'stats')">📈 Stats</div>
-          <div class="tab" onclick="changeTab(this, 'settings')">⚙️ Reset</div>
+          <div class="tab" onclick="changeTab(this, 'audit')">📋 Audit Log</div>
+          <div class="tab" onclick="changeTab(this, 'config')">⚙️ Config</div>
+          <div class="tab" onclick="changeTab(this, 'settings')">🔄 Reset</div>
         </div>
       </div>
       <div class="logout" onclick="logout()">🚪 Logout</div>
@@ -489,7 +491,10 @@
                 <h1 style="font-size: 2rem; font-weight: bold; color: #333; text-align: center; margin-bottom: 10px;">📈 Statistics</h1>
                 <p style="text-align: center; color: #555; font-size: 1rem; margin-bottom: 10px;">View real-time voting stats grouped by role.</p>
                 ${roleSections}
-                <button onclick="saveResults()" class="save-button">💾 Save Results</button>
+                <div style="display: flex; gap: 10px; justify-content: center; margin-top: 30px;">
+                  <button onclick="saveResults()" class="save-button">💾 Save Results</button>
+                  <button onclick="exportResults()" class="save-button" style="background: linear-gradient(to right, #f093fb, #f5576c);">📥 Export as CSV</button>
+                </div>
               `;
 
               document.getElementById('mainContent').innerHTML = html;
@@ -499,6 +504,169 @@
               document.getElementById('mainContent').innerHTML = '<p style="color: red; text-align: center;">Error loading statistics data.</p>';
             });
           break;
+        case 'audit':
+          fetch('/admin/audit-log')
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                const auditTable = `
+                  <style>
+                    .audit-container {
+                      max-width: 1200px;
+                      margin: 20px auto;
+                      background: white;
+                      padding: 30px;
+                      border-radius: 12px;
+                      box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+                    }
+                    .audit-table {
+                      width: 100%;
+                      border-collapse: collapse;
+                      font-size: 14px;
+                    }
+                    .audit-table thead {
+                      background: linear-gradient(to right, #667eea, #764ba2);
+                      color: white;
+                    }
+                    .audit-table th,
+                    .audit-table td {
+                      padding: 12px;
+                      text-align: left;
+                      border-bottom: 1px solid #ddd;
+                    }
+                    .audit-table tbody tr:hover {
+                      background: #f5f5f5;
+                    }
+                  </style>
+                  <h1 style="font-size: 2rem; margin-bottom: 20px;">📋 Audit Log</h1>
+                  <div class="audit-container">
+                    <table class="audit-table">
+                      <thead>
+                        <tr>
+                          <th>Timestamp</th>
+                          <th>Action</th>
+                          <th>Username</th>
+                          <th>Email</th>
+                          <th>IP Address</th>
+                          <th>Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${data.logs.map(log => `
+                          <tr>
+                            <td>${new Date(log.timestamp).toLocaleString()}</td>
+                            <td><strong>${log.action}</strong></td>
+                            <td>${log.username || '-'}</td>
+                            <td>${log.email || '-'}</td>
+                            <td>${log.ip_address || '-'}</td>
+                            <td>${log.details || '-'}</td>
+                          </tr>
+                        `).join('')}
+                      </tbody>
+                    </table>
+                  </div>
+                `;
+                document.getElementById('mainContent').innerHTML = auditTable;
+              }
+            });
+          break;
+
+        case 'config':
+          fetch('/admin/election-config')
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                const configHtml = `
+                  <style>
+                    .config-container {
+                      max-width: 700px;
+                      margin: 40px auto;
+                      background: white;
+                      padding: 30px;
+                      border-radius: 12px;
+                      box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+                    }
+                    .config-item {
+                      margin-bottom: 20px;
+                      padding: 15px;
+                      background: #f9f9f9;
+                      border-left: 4px solid #667eea;
+                      border-radius: 4px;
+                    }
+                    .config-item label {
+                      display: block;
+                      font-weight: bold;
+                      margin-bottom: 8px;
+                      color: #333;
+                    }
+                    .config-item input[type="checkbox"] {
+                      margin-right: 8px;
+                      cursor: pointer;
+                    }
+                    .config-item input[type="datetime-local"] {
+                      padding: 8px;
+                      border: 1px solid #ddd;
+                      border-radius: 4px;
+                      width: 100%;
+                    }
+                    .config-button {
+                      background: linear-gradient(to right, #667eea, #764ba2);
+                      color: white;
+                      padding: 12px 30px;
+                      border: none;
+                      border-radius: 8px;
+                      cursor: pointer;
+                      font-weight: bold;
+                      transition: transform 0.2s;
+                    }
+                    .config-button:hover {
+                      transform: translateY(-2px);
+                    }
+                  </style>
+                  <h1 style="font-size: 2rem; margin-bottom: 20px;">⚙️ Election Configuration</h1>
+                  <div class="config-container">
+                    <div class="config-item">
+                      <label>
+                        <input type="checkbox" id="enable_countdown" ${data.config.enable_countdown_timer ? 'checked' : ''}>
+                        Enable Countdown Timer
+                      </label>
+                    </div>
+                    <div class="config-item">
+                      <label>Election End Time:</label>
+                      <input type="datetime-local" id="election_end_time" value="${data.config.election_end_time ? data.config.election_end_time.slice(0, 16) : ''}">
+                    </div>
+                    <div class="config-item">
+                      <label>
+                        <input type="checkbox" id="enable_email" ${data.config.enable_email_notifications ? 'checked' : ''}>
+                        Enable Email Notifications
+                      </label>
+                    </div>
+                    <div class="config-item">
+                      <label>
+                        <input type="checkbox" id="enable_2fa" ${data.config.enable_2fa ? 'checked' : ''}>
+                        Enable Two-Factor Authentication (2FA)
+                      </label>
+                    </div>
+                    <div class="config-item">
+                      <label>
+                        <input type="checkbox" id="enable_audit" ${data.config.enable_audit_logging ? 'checked' : ''}>
+                        Enable Audit Logging
+                      </label>
+                    </div>
+                    <div class="config-item">
+                      <label>
+                        <input type="checkbox" id="enable_export" ${data.config.enable_export ? 'checked' : ''}>
+                        Enable Export Results
+                      </label>
+                    </div>
+                    <button class="config-button" onclick="saveConfig()">💾 Save Configuration</button>
+                  </div>
+                `;
+                document.getElementById('mainContent').innerHTML = configHtml;
+              }
+            });
+          break;
+
           case 'settings':
   content.innerHTML = `
     <style>
@@ -564,6 +732,45 @@
       } catch (err) {
         console.error(err);
         showModal('An error occurred while saving results.');
+      }
+    }
+
+    async function exportResults() {
+      try {
+        window.location.href = '/export-results';
+        showModal('Results exported as CSV!');
+      } catch (err) {
+        console.error(err);
+        showModal('An error occurred while exporting results.');
+      }
+    }
+
+    async function saveConfig() {
+      try {
+        const config = {
+          enable_countdown_timer: document.getElementById('enable_countdown').checked,
+          election_end_time: document.getElementById('election_end_time').value,
+          enable_email_notifications: document.getElementById('enable_email').checked,
+          enable_2fa: document.getElementById('enable_2fa').checked,
+          enable_audit_logging: document.getElementById('enable_audit').checked,
+          enable_export: document.getElementById('enable_export').checked
+        };
+
+        const response = await fetch('/admin/election-config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+        const result = await response.json();
+
+        if (result.success) {
+          showModal('✅ Configuration saved successfully!');
+        } else {
+          showModal('❌ ' + (result.message || 'Failed to save configuration.'));
+        }
+      } catch (err) {
+        console.error(err);
+        showModal('❌ An error occurred while saving configuration.');
       }
     }
 

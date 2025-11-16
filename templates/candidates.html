@@ -97,7 +97,11 @@
     </div>
   </div>
 
-  <h1 class="text-4xl font-extrabold text-center mb-10 text-white">Vote for Each Role</h1>
+  <h1 class="text-4xl font-extrabold text-center mb-4 text-white">Vote for Each Role</h1>
+  <div id="countdownTimer" class="text-center text-white text-xl font-bold mb-6 hidden">
+    <p>⏱️ Voting ends in: <span id="timerDisplay">calculating...</span></p>
+  </div>
+  
   <form id="voteForm" class="w-full max-w-6xl space-y-10">
     {% for role, candidates in candidates_by_role.items() %}
       <fieldset class="border border-white/40 rounded-xl p-4">
@@ -130,6 +134,48 @@
   </div>
 
   <script>
+    // Fetch and display countdown timer
+    async function loadCountdownTimer() {
+      try {
+        const response = await fetch('/admin/election-config');
+        const data = await response.json();
+        if (data.success && data.config.enable_countdown_timer && data.config.election_end_time) {
+          const endTime = new Date(data.config.election_end_time).getTime();
+          const timerElement = document.getElementById('countdownTimer');
+          const displayElement = document.getElementById('timerDisplay');
+          
+          if (timerElement) {
+            timerElement.classList.remove('hidden');
+            
+            function updateTimer() {
+              const now = new Date().getTime();
+              const distance = endTime - now;
+              
+              if (distance < 0) {
+                displayElement.textContent = 'Voting has ended!';
+                document.getElementById('voteForm').style.pointerEvents = 'none';
+                document.getElementById('voteForm').style.opacity = '0.5';
+                return;
+              }
+              
+              const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+              const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+              const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+              
+              displayElement.textContent = `${hours}h ${minutes}m ${seconds}s`;
+            }
+            
+            updateTimer();
+            setInterval(updateTimer, 1000);
+          }
+        }
+      } catch (err) {
+        console.error('Error loading countdown timer:', err);
+      }
+    }
+    
+    loadCountdownTimer();
+
     // Logout function
     async function logout() {
       const response = await fetch('/logout', { method: 'POST' });
