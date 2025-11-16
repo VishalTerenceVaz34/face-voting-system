@@ -1488,7 +1488,7 @@ def export_results():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
-
+@app.route('/result', methods=['GET'])
 def result():
     try:
         conn = sqlite3.connect(DATABASE)
